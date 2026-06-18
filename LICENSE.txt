@@ -1,0 +1,22 @@
+WakeWord Plugin — License
+Copyright (c) 2026 odysseyzjh. All Rights Reserved.
+
+This software and its associated documentation files (the "Software") are
+proprietary information of odysseyzjh. The use, copying, modification, and
+distribution of the Software are permitted only with explicit authorization
+from odysseyzjh. Any other use, copying, modification, or distribution is
+prohibited without prior written permission.
+
+odysseyzjh makes no express or implied warranties regarding the Software,
+including but not limited to warranties of merchantability, fitness for a
+particular purpose, or non-infringement. In no event shall odysseyzjh be liable
+for any claims, damages, or other liabilities arising from the use of the
+Software.
+
+----------------------------------------------------------------------------
+
+This plugin bundles third-party components (sherpa-onnx, ONNX Runtime, and a
+keyword-spotting model) that are distributed under their own open-source
+licenses (Apache-2.0 and MIT). Your use of those components is governed by the
+respective licenses. See THIRD_PARTY_NOTICES.md for the full attributions and
+license texts.
