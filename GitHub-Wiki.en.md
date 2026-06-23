@@ -1,6 +1,6 @@
 # WakeWord Plugin · English Guide
 
-Offline wake-word / keyword spotting for **Unreal Engine 5.6 / 5.7**, powered by
+Offline wake-word / keyword spotting for **Unreal Engine 5.6+**, powered by
 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (k2-fsa, Apache-2.0). It bundles two
 3.3M models: **Chinese (wenetspeech)** and **English (gigaspeech)**.
 
@@ -243,5 +243,3 @@ and fill the folder/file names.
 
 ---
 
-License: plugin code is © odysseyzjh. Bundled sherpa-onnx / ONNX Runtime / models keep their own
-open-source licenses. See `THIRD_PARTY_NOTICES.md`.
