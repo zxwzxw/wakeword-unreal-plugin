@@ -1,246 +1,247 @@
 # WakeWord Plugin · English Guide
 
 Offline wake-word / keyword spotting for **Unreal Engine 5.6 / 5.7**, powered by
-[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (k2-fsa, Apache-2.0). Bundles **two 3.3M
-models — Chinese (wenetspeech) and English (gigaspeech)** — switchable with one setting.
-**100% on-device, low latency, no per-call cost.**
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (k2-fsa, Apache-2.0). It bundles two
+3.3M models: **Chinese (wenetspeech)** and **English (gigaspeech)**.
 
-> Platform: Win64 · Engine: UE 5.6 / 5.7 · Wake words: pick a language (Chinese/English), then
-> just type the phrase in a panel or Blueprint — it is auto-converted to model tokens and auto-saved.
+> Platform: Win64 · Engine: UE 5.6 + · Version: 1.2.0 · Fully local, low latency, no
+> per-call cost.
 
 ---
 
 ## Contents
 1. [Install](#1-install)
-2. [Quick start (5 min)](#2-quick-start-5-min)
-3. [Managing wake words (key feature)](#3-managing-wake-words-key-feature)
-4. [Tuning](#4-tuning)
-5. [Pairing with a dialog pipeline (RealtimeVoice)](#5-pairing-with-a-dialog-pipeline-realtimevoice)
-6. [Blueprint / C++ API](#6-blueprint--c-api)
-7. [Troubleshooting](#7-troubleshooting)
-8. [FAQ](#8-faq)
+2. [Quick Start](#2-quick-start)
+3. [Chinese vs English](#3-chinese-vs-english)
+4. [Managing Wake Words](#4-managing-wake-words)
+5. [Tuning](#5-tuning)
+6. [Dialog Pipeline](#6-dialog-pipeline)
+7. [Blueprint / C++ API](#7-blueprint--c-api)
+8. [Troubleshooting](#8-troubleshooting)
+9. [FAQ](#9-faq)
 
 ---
 
 ## 1. Install
 
 1. Copy the whole `WakeWord/` folder into your project's `Plugins/` directory.
-2. Open the project (or enable **Wake Word** under `Edit → Plugins` and restart) to compile it.
-3. Confirm `Plugins/WakeWord/Binaries/Win64/` contains `onnxrt_ww.dll` and
-   `sherpa-onnx-c-api.dll` (the build stages them automatically).
+2. Enable **Wake Word** in `Edit -> Plugins` or in your `.uproject`, then restart the editor.
+3. Let Unreal compile the plugin. The build stages the bundled runtime DLLs into
+   `Plugins/WakeWord/Binaries/Win64/`.
 
-> The model and runtime DLLs are bundled — no extra downloads or installs needed.
-
----
-
-## 2. Quick start (5 min)
-
-1. Create an **Actor Blueprint** (e.g. `BP_WakeWordManager`) and drop it in the level.
-2. **Components → + Add → search "Wake Word" → add Wake Word Component**.
-3. Select the component, tick **`Auto Start On Begin Play`** in Details.
-4. With the component selected, scroll Details to **Events** → click the green **＋** next to
-   `On Wake Word Detected` to spawn the event node.
-5. Wire the event's `Keyword` pin into a `Print String`.
-6. Press Play and say a wake word into your mic → the matched phrase prints.
-
-Default wake words are **你好双蛙 / 小青蛙** (Chinese); the English model defaults to
-**HELLO FROG / OK COMPUTER**. Change them any time (next section).
-
-> Want English? Project Settings → Plugins → Wake Word → **Language = English**, then say
-> **"HELLO FROG"**. See the next section.
+No model download is required. The plugin ships with the Chinese and English model files,
+tokenizers, dictionaries, and Win64 runtime DLLs.
 
 ---
 
-## 3. Managing wake words (key feature)
+## 2. Quick Start
 
-### First pick a language: Chinese or English
+1. Create an Actor Blueprint, for example `BP_WakeWordManager`, and place it in the level.
+2. Add **Wake Word Component**.
+3. In the component Details panel, enable **Auto Start On Begin Play**.
+4. Bind **On Wake Word Detected** and print the `Keyword` pin.
+5. Press Play and say **"你好双蛙"**. The matched phrase should print.
 
-The wake-word language is decided by the **model**; the two cannot be mixed (a component loads
-exactly one model):
+Built-in default phrases:
+
+| Language | Component preset | Default phrases |
+|---|---|---|
+| Chinese | `Model -> Preset = Chinese` or `Auto` with `Default Language = Chinese` | `你好双蛙`, `你好小蛙`, `小青蛙` |
+| English | `Model -> Preset = English` or `Auto` with `Default Language = English` | `HELLO FROG`, `HEY FROG`, `OK COMPUTER` |
+
+For English, set the component `Model -> Preset` to **English** and say **"HELLO FROG"**.
+
+---
+
+## 3. Chinese vs English
+
+A wake-word model is single-language. WakeWord 1.2.0 therefore uses **two separate project lists**:
 
 | | Chinese | English |
 |---|---|---|
-| Model | wenetspeech (`Resources/kws-zh`) | gigaspeech (`Resources/kws-en`) |
-| Units | pinyin (initial + toned final) | sentencepiece BPE sub-words |
-| How to select | Project Settings → Wake Word → `Language = Chinese` | `Language = English` |
+| Project list | `Chinese Wake Words` | `English Wake Words` |
+| Model folder | `Resources/kws-zh` | `Resources/kws-en` |
+| Tokenization | pinyin initials + finals | sentencepiece BPE/unigram |
+| Component | `Preset=Chinese` | `Preset=English` |
 
-- The component's `Model → Preset` defaults to **Auto**, which follows the `Language` above.
-  You can also force `Chinese` / `English` / `Custom` per component.
-- Switching `Language` auto-loads that language's default words **if you haven't customized the
-  list** (Chinese "你好双蛙…" / English "HELLO FROG…"); a customized list is never touched.
-- **Want both at once?** Put two `Wake Word Component`s on one Actor — one `Preset=Chinese`,
-  one `Preset=English` — and bind each event (leave the second one's `Use Project Wake Words`
-  off; give it its own `Custom Keywords` or the bundled keywords.txt).
+- A `Preset=Chinese` component reads `Chinese Wake Words`.
+- A `Preset=English` component reads `English Wake Words`.
+- A `Preset=Auto` component follows **Default Language (Auto preset)**.
+- To support both languages at once, add two Wake Word components: one `Preset=Chinese`, one
+  `Preset=English`. Both can keep `Use Project Wake Words` enabled because they read different lists.
 
-After picking a language, you only enter the **phrase** (Chinese or English) — the plugin
-auto-converts it to that model's tokens and persists it. **No file editing, no scripts.**
-Two entry points:
+Do not put English phrases in the Chinese list or Chinese phrases in the English list. A wrong-language
+phrase produces no valid tokens and is skipped with a warning instead of crashing the process.
 
-### Option A — Project Settings panel (recommended)
+---
 
-**Project Settings → Plugins → Wake Word**:
+## 4. Managing Wake Words
+
+### Project Settings Panel
+
+Open **Project Settings -> Plugins -> Wake Word**:
 
 | Field | Meaning |
 |---|---|
-| **Language** | Wake-word language: `Chinese` (kws-zh) or `English` (kws-en). Selects the model + tokenizer. |
-| **Wake Words** | Array of entries. Click ＋, fill `Phrase` (Chinese "芝麻开门", English `OPEN THE DOOR`). `Tokens` auto-displays the generated tokens (per the current Language) so you can verify. |
-| **Boost (0=global)** | Per-word boosting; 0 = use global. Use ~2.0 for short words. |
-| **Threshold (0=global)** | Per-word threshold; 0 = use global. |
-| **Default Threshold** | Global sensitivity (raise to 0.35 if you get false triggers). |
-| **Default Score** | Global boosting. |
+| `Chinese Wake Words` | Chinese phrases for the Chinese model. Type the original phrase; `Tokens` is generated automatically. |
+| `English Wake Words` | English phrases for the English model. Type normal English words; `Tokens` is generated automatically. |
+| `Boost (0 = global)` | Per-word boosting. Higher means easier to trigger. Try `2.0` for short phrases. |
+| `Threshold (0 = global)` | Per-word threshold. Higher means more conservative. |
+| `Default Threshold` | Global threshold when an entry leaves `Threshold` at `0`. |
+| `Default Score` | Global boosting score when an entry leaves `Boost` at `0`. |
+| `Default Language (Auto preset)` | Only affects components whose `Model -> Preset` is `Auto`. |
 
-Edits auto-persist to `Config/DefaultGame.ini` (project-wide). The component reads this by
-default (`Use Project Wake Words = true`).
+Edits persist to `Config/DefaultGame.ini`, using `+ChineseWakeWords=`, `+EnglishWakeWords=`, and
+`DefaultLanguage=`.
 
-> After editing, call the component's **`Refresh Wake Words`** (or restart PIE) to apply live.
+If a component is already listening, call **Refresh Wake Words** or restart PIE to apply changes.
 
-### Option B — Blueprint runtime add/remove (e.g. let players define their own)
+### Blueprint Runtime API
 
-`UWakeWordLibrary` exposes global functions:
+Every list operation takes a `Language` parameter:
 
-```
-Set Language (Language=English, bSave=true)   // switch Chinese/English (model + tokenizer)
-Get Language              -> current language (Chinese / English)
-Add Wake Word (Phrase="芝麻开门", Boost=0, Threshold=0, bSave=true)
-Remove Wake Word (Phrase="芝麻开门")
-Clear Wake Words
-Get Wake Words            -> all current phrases (array)
-Has Wake Word (Phrase)    -> already exists?
-Preview Tokens (Phrase)   -> preview generated tokens (current language, no change)
-Save Wake Words           -> persist manually
-```
-
-Typical flow (player types a phrase and saves it):
-```
-[TextBox text] ─▶ Add Wake Word (bSave=true) ─▶ WakeWordComponent ▸ Refresh Wake Words
+```text
+Add Wake Word(Language, Phrase, Boost, Threshold, bSave)
+Remove Wake Word(Language, Phrase, bSave)
+Clear Wake Words(Language, bSave)
+Get Wake Words(Language)
+Has Wake Word(Language, Phrase)
+Preview Tokens(Language, Phrase)
+Save Wake Words()
+Get Default Language()
+Set Default Language(Language, bSave)
 ```
 
-`bSave=true` writes to disk so it survives restarts. `Refresh Wake Words` applies it live.
+Typical player-customization flow:
 
-### About English wake words
+```text
+Add Wake Word(Language=English, Phrase="OPEN THE DOOR", bSave=true)
+    -> WakeWordComponent(Preset=English) -> Refresh Wake Words
+```
 
-- **Use the English model**: `Language = English` (or component `Preset = English`). It uses the
-  gigaspeech English model with accuracy on par with the Chinese one. Just type the English phrase
-  (e.g. `OPEN THE DOOR`, `HELLO FROG`); the built-in sentencepiece tokenizer reproduces the BPE
-  tokens the model expects **exactly** — no Python, no file editing. Case doesn't matter
-  (it is upper-cased internally).
-- **Choosing words**: clear, **2+ word** phrases are most reliable; add `Boost = 2.0` to very short
-  words (`GO`, `NO`).
-- **No mixing in one phrase**: the Chinese model only knows pinyin and the English model only knows
-  BPE; one model can't do both languages. For both, use two components (see "First pick a language").
-- **Exact verification**: use `Preview Tokens`, or run `Tools/text2token.py --lang en` offline (see README).
+### Raw Token Lines
 
-### About Chinese + Latin mixing (Chinese model only)
+Advanced users can bypass phrase tokenization with component **Custom Keywords (raw tokens)** or
+`Set Custom Keywords`:
 
-Under the Chinese model, a mixed phrase (e.g. "你好Jarvis") tokenizes the Chinese to pinyin and
-maps Latin letters to letter tokens (best-effort). For pure English, switch to the English model.
+```text
+n ǐ h ǎo sh uāng w ā @你好双蛙
+▁HE LL O ▁F RO G @HELLO_FROG
+```
 
-### Priority
+Format:
 
-`Custom Keywords (raw tokens)` (component, advanced) > Project-settings wake words > bundled `keywords.txt`.
+```text
+<tokens> [:boost] [#threshold] @display_id
+```
+
+WakeWord 1.2.0 validates tokens against the model `tokens.txt` before sherpa-onnx sees them. Invalid
+lines are dropped and logged, which prevents bad custom keywords from killing the process. The plugin
+also swaps spaces inside `@display_id` to `_` before sherpa and restores them in the detection callback,
+but writing underscores yourself is still recommended for raw lines.
 
 ---
 
-## 4. Tuning
+## 5. Tuning
 
-| Symptom | Fix |
+| Symptom | Adjustment |
 |---|---|
-| False triggers | `Default Threshold` 0.25 → 0.35; or set the entry's `Threshold = 0.30` |
-| Missed wakes | Lower the threshold; or set `Boost = 2.0`; prefer 4+ syllable phrases |
-| Short word mis-fires | Avoid 2-syllable words; use 4 syllables (e.g. "你好双蛙") |
+| False triggers | Raise `Default Threshold` from `0.25` to `0.35`, or set that entry's `Threshold` around `0.30`. |
+| Missed wakes | Lower the threshold, raise `Boost`, and use a longer, clearer phrase. |
+| Short phrase unstable | Prefer 3+ syllables/words; add `Boost = 2.0` for very short phrases. |
 
-`Retrigger Cooldown (s)`: post-hit cooldown (default 1s) to prevent a single utterance
-re-triggering.
-
----
-
-## 5. Pairing with a dialog pipeline (RealtimeVoice)
-
-A wake word is just a switch. On a hit, free the mic for the dialog component, then resume:
-
-**Setup**
-- Set RealtimeVoice's `Auto Start On Begin Play` to **false** (else it grabs the mic at BeginPlay).
-- Set WakeWord's `Auto Start On Begin Play` to **true**.
-
-**Wiring**
-```
-WakeWord.OnWakeWordDetected   ─▶ WakeWord.StopListening()   ─▶ RealtimeVoice.StartSession()
-RealtimeVoice.OnSessionFinished ─▶ RealtimeVoice.StopSession() ─▶ WakeWord.StartListening()
-```
-Both use the default mic and fully release it on stop, so the hand-off is clean; no native-lib clash.
+`Retrigger Cooldown (s)` controls how soon the same utterance may trigger again. The default is `1.0`.
 
 ---
 
-## 6. Blueprint / C++ API
+## 6. Dialog Pipeline
 
-### Component events
-- `On Wake Word Detected (Keyword: String)` — a wake word fired.
-- `On Listening Started` — mic open, spotter ready.
-- `On Error (Code: Int, Message: String)` — error (Code < 0 = client side).
+WakeWord is the always-on switch. When it fires, stop KWS, hand the microphone to your dialog component,
+then restart KWS when dialog ends:
 
-### Component functions
+```text
+WakeWord.OnWakeWordDetected
+    -> WakeWord.StopListening()
+    -> RealtimeVoice.StartSession()
+
+RealtimeVoice.OnSessionFinished
+    -> RealtimeVoice.StopSession()
+    -> WakeWord.StartListening()
+```
+
+Set RealtimeVoice `Auto Start On Begin Play` to false so it does not grab the microphone before the wake
+word fires. See `Docs/Integration.md` for details.
+
+---
+
+## 7. Blueprint / C++ API
+
+### Component Events
+
+- `On Wake Word Detected(Keyword)` — a phrase was detected.
+- `On Listening Started` — microphone and spotter are ready.
+- `On Error(Code, Message)` — startup/runtime error.
+
+### Component Functions
+
 - `Start Listening` / `Stop Listening` / `Is Listening`
-- `Is Ready` — native libs loaded and model/keywords present.
-- `Refresh Wake Words` — apply wake-word changes live.
-- `Set Custom Keywords (Lines, bRestart)` — advanced raw token lines.
-- `Get Model Dir` — for path debugging.
-
-### Wake-word library (UWakeWordLibrary, global)
-`Get / Set Language`, `Add / Remove / Clear / Get / Has Wake Word`, `Preview Tokens`, `Save Wake Words`.
+- `Is Ready`
+- `Refresh Wake Words`
+- `Set Custom Keywords`
+- `Get Model Dir`
 
 ### C++
+
 ```cpp
 #include "WakeWordComponent.h"
 #include "WakeWordLibrary.h"
-#include "WakeWordSettings.h"   // EWakeWordLanguage
+#include "WakeWordSettings.h"
 
-// Chinese
-UWakeWordLibrary::AddWakeWord(TEXT("芝麻开门"), 0.f, 0.f, /*bSave*/true);
+UWakeWordLibrary::AddWakeWord(EWakeWordLanguage::Chinese, TEXT("芝麻开门"), 0.f, 0.f, true);
+UWakeWordLibrary::AddWakeWord(EWakeWordLanguage::English, TEXT("OPEN THE DOOR"), 0.f, 0.f, true);
 
-// English: switch the language first, then add words
-UWakeWordLibrary::SetLanguage(EWakeWordLanguage::English, /*bSave*/true);
-UWakeWordLibrary::AddWakeWord(TEXT("OPEN THE DOOR"), 0.f, 0.f, true);
-
-WakeWord->OnWakeWordDetected.AddDynamic(this, &AMyActor::OnWake);
-WakeWord->RefreshWakeWords();   // component Model.Preset=Auto follows the language above
+WakeWord->Model.Preset = EWakeWordModelPreset::English;
+WakeWord->RefreshWakeWords();
 WakeWord->StartListening();
 ```
 
+`SetDefaultLanguage(EWakeWordLanguage::English, true)` only changes components that use
+`Model -> Preset = Auto`.
+
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Check |
 |---|---|
-| `On Error` code `-10` | Native DLLs not loaded: confirm `Binaries/Win64` has `onnxrt_ww.dll` / `sherpa-onnx-c-api.dll`. |
-| `On Error` code `-11` | Model/keywords missing: use `Get Model Dir`, confirm `Resources/kws-zh` (or `kws-en` for English) files exist and at least one wake word is defined. |
-| `On Error` code `-3` | Mic won't open: check the default recording device and Windows mic permission. |
-| Never detects | Check `LogWakeWord` for `Spotter ready ...`; use `Preview Tokens` to verify your phrase tokenizes; lower the threshold. |
-| `produced no tokens` warning | The phrase has unsupported characters (rare glyphs / pure symbols); pick another phrase or use raw tokens. |
+| `On Error` code `-10` | Native DLLs did not load. Confirm `Binaries/Win64` has `onnxrt_ww.dll` and `sherpa-onnx-c-api.dll`. |
+| `On Error` code `-11` | Model or keyword source missing. Use `Get Model Dir` and confirm the model files and a matching wake-word list exist. |
+| `On Error` code `-3` | Microphone cannot open. Check Windows mic permission and the default recording device. |
+| No detection | Make sure the phrase is in the list matching the component preset; use `Preview Tokens`; lower the threshold. |
+| `produced no tokens` warning | The phrase is in the wrong language list or contains unsupported characters. Move it to the correct list or change the phrase. |
 
 ---
 
-## 8. FAQ
+## 9. FAQ
 
-**Q: Where are wake words stored? Do they persist?**
-A: In the project's `Config/DefaultGame.ini` (when edited in the panel or saved with `bSave=true`). They travel with the project and survive restarts.
+**Can Chinese and English run at the same time?**
+Yes. Add two components, one `Preset=Chinese` and one `Preset=English`, and bind both events.
 
-**Q: Does it need the internet? Any cost?**
-A: Fully offline, zero cost, no data leaves the machine.
+**Where are wake words saved?**
+In `Config/DefaultGame.ini` when edited in the panel or saved with `bSave=true`.
 
-**Q: How many wake words can I have?**
-A: Unlimited; each model is only 3.3M and the cost is negligible. Keep the active set modest to limit false triggers.
+**Does English really work?**
+Yes. Put English phrases in `English Wake Words` and use a component with `Preset=English`. The bundled
+sentencepiece-compatible tokenizer reproduces the model tokenization at runtime.
 
-**Q: Does English actually work?**
-A: Yes. Set `Language = English` to use the bundled gigaspeech English model and just type English phrases — accuracy is on par with Chinese. The built-in sentencepiece tokenizer matches the model's training tokenization exactly, no Python required.
+**Can I mix Chinese and English in one phrase?**
+No. One model recognizes one token system. Mixed/wrong-language phrases are skipped. Use two components.
 
-**Q: Can I use Chinese and English at the same time?**
-A: One model handles one language. For both, put two `Wake Word Component`s on one Actor — one `Preset=Chinese`, one `Preset=English` — and bind each event.
-
-**Q: Can I swap in a higher-accuracy model?**
-A: Drop the onnx files into `Resources/kws-zh` or `kws-en`, set the component's `Model → Preset` to `Custom`, and fill the folder/file names (defaults use the small int8 model).
+**Can I use a different model?**
+Yes. Put the ONNX files and `tokens.txt` in a folder, set the component `Model -> Preset` to `Custom`,
+and fill the folder/file names.
 
 ---
 
-License: the plugin is © odysseyzjh; bundled sherpa-onnx / ONNX Runtime / model are under their
-own open-source licenses (Apache-2.0 / MIT) — see `THIRD_PARTY_NOTICES.md`.
+License: plugin code is © odysseyzjh. Bundled sherpa-onnx / ONNX Runtime / models keep their own
+open-source licenses. See `THIRD_PARTY_NOTICES.md`.
