@@ -1,221 +1,232 @@
 # WakeWord 插件 · 中文教程
 
-UE 5.6 / 5.7 离线唤醒词检测插件。基于 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)(k2-fsa, Apache-2.0) 的 Keyword Spotting，内置 **中文 (wenetspeech 3.3M)** 与 **英文 (gigaspeech 3.3M)** 两个模型，一个开关切换。**100% 本地、低延迟、无每次调用费用**。
+UE 5.6 + 离线唤醒词检测插件。基于
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (k2-fsa, Apache-2.0) 的 Keyword Spotting，
+内置 **中文 (wenetspeech 3.3M)** 与 **英文 (gigaspeech 3.3M)** 两套模型。
 
-> 平台：Win64 · 引擎：UE 5.6 / 5.7 · 唤醒词：先选语言(中文/英文)，再在面板或蓝图里填原文即可，自动转换、自动保存。
+> 平台：Win64 · 引擎：UE 5.6 + · 版本：1.2.0 · 100% 本地、低延迟、无每次调用费用。
 
 ---
 
 ## 目录
 1. [安装](#1-安装)
-2. [5 分钟上手](#2-5-分钟上手)
-3. [管理唤醒词（重点）](#3-管理唤醒词重点)
-4. [调参](#4-调参)
-5. [接入对话管线（RealtimeVoice）](#5-接入对话管线realtimevoice)
-6. [蓝图 / C++ API](#6-蓝图--c-api)
-7. [排错](#7-排错)
-8. [常见问题 FAQ](#8-常见问题-faq)
+2. [快速开始](#2-快速开始)
+3. [中文与英文](#3-中文与英文)
+4. [管理唤醒词](#4-管理唤醒词)
+5. [调参](#5-调参)
+6. [对话管线接入](#6-对话管线接入)
+7. [蓝图 / C++ API](#7-蓝图--c-api)
+8. [排错](#8-排错)
+9. [FAQ](#9-faq)
 
 ---
 
 ## 1. 安装
 
-1. 把 `WakeWord/` 整个文件夹复制到工程的 `Plugins/` 目录。
-2. 打开工程（或 `Edit → Plugins` 勾选 **Wake Word** 并重启），让它编译。
-3. 确认 `Plugins/WakeWord/Binaries/Win64/` 下生成了 `onnxrt_ww.dll` 与 `sherpa-onnx-c-api.dll`（构建会自动拷贝）。
+1. 把整个 `WakeWord/` 文件夹复制到工程的 `Plugins/` 目录。
+2. 在 `Edit -> Plugins` 或 `.uproject` 中启用 **Wake Word**，然后重启编辑器。
+3. 让 Unreal 编译插件。构建会把内置运行时 DLL 自动放到 `Plugins/WakeWord/Binaries/Win64/`。
 
-> 插件已自带模型与运行时 DLL，无需任何额外下载或安装。
-
----
-
-## 2. 5 分钟上手
-
-1. 新建一个 **Actor 蓝图**（如 `BP_WakeWordManager`），拖进关卡。
-2. **Components → + Add → 搜 "Wake Word" → 添加 Wake Word Component**。
-3. 选中组件，Details 面板里勾上 **`Auto Start On Begin Play`**。
-4. 在 Components 面板选中该组件 → Details 最下方 **Events** → 点 `On Wake Word Detected` 旁的绿色 **＋**，生成事件节点。
-5. 把事件的 `Keyword` 引脚接到 `Print String`。
-6. Play，对麦克风说 **"你好双蛙"** → 屏幕打印命中的词。
-
-就这么简单。默认唤醒词是 **你好双蛙 / 小青蛙**（中文），英文模型默认 **HELLO FROG / OK COMPUTER**，可随时改（见下一节）。
-
-> 想要英文？项目设置 → Plugins → Wake Word → **Language = English**，对麦克风说 **"HELLO FROG"** 即可。详见下一节。
+插件自带中文/英文模型、tokens、分词资源和 Win64 DLL，无需额外下载模型。
 
 ---
 
-## 3. 管理唤醒词（重点）
+## 2. 快速开始
 
-### 先选语言：中文 or 英文
+1. 新建一个 Actor 蓝图，例如 `BP_WakeWordManager`，拖进关卡。
+2. 添加 **Wake Word Component**。
+3. 在组件 Details 面板里勾选 **Auto Start On Begin Play**。
+4. 绑定 **On Wake Word Detected**，把 `Keyword` 接到 `Print String`。
+5. Play 后对麦克风说 **"你好双蛙"**，屏幕应打印命中的短语。
 
-唤醒词的语言由**模型**决定，两个模型不能混用（一个组件只加载一个模型）：
+内置默认词：
+
+| 语言 | 组件 Preset | 默认唤醒词 |
+|---|---|---|
+| 中文 | `Model -> Preset = Chinese`，或 `Auto` + `Default Language = Chinese` | `你好双蛙`、`你好小蛙`、`小青蛙` |
+| 英文 | `Model -> Preset = English`，或 `Auto` + `Default Language = English` | `HELLO FROG`、`HEY FROG`、`OK COMPUTER` |
+
+要测试英文，把组件 `Model -> Preset` 设为 **English**，然后说 **"HELLO FROG"**。
+
+---
+
+## 3. 中文与英文
+
+一个唤醒词模型只能识别一种 token 系统。WakeWord 1.2.0 因此把项目设置拆成**两个独立列表**：
 
 | | 中文 | 英文 |
 |---|---|---|
-| 模型 | wenetspeech (`Resources/kws-zh`) | gigaspeech (`Resources/kws-en`) |
-| 建模单元 | 拼音(声母+韵母) | sentencepiece BPE 子词 |
-| 怎么选 | 项目设置 → Wake Word → `Language = Chinese` | `Language = English` |
+| 项目列表 | `Chinese Wake Words` | `English Wake Words` |
+| 模型目录 | `Resources/kws-zh` | `Resources/kws-en` |
+| 分词方式 | 拼音声母 + 韵母 | sentencepiece BPE/unigram |
+| 组件选择 | `Preset=Chinese` | `Preset=English` |
 
-- 组件 `Model → Preset` 默认 **Auto**，自动跟随上面的 `Language`。也可在组件上强制 `Chinese` / `English` / `Custom`。
-- 切换 `Language` 时，若你**没改过**唤醒词列表，会自动换成该语言的默认词（中文「你好双蛙…」/ 英文「HELLO FROG…」）；**改过的列表不会被动**。
-- **想中英同时支持**：给一个 Actor 挂两个 `Wake Word Component`，一个 `Preset=Chinese`、一个 `Preset=English`，各绑各的事件（第二种语言的组件别勾 `Use Project Wake Words`，用它自己的 `Custom Keywords` 或内置 keywords.txt）。
+- `Preset=Chinese` 的组件读取 `Chinese Wake Words`。
+- `Preset=English` 的组件读取 `English Wake Words`。
+- `Preset=Auto` 的组件跟随 **Default Language (Auto preset)**。
+- 中英文同时常驻时，给一个 Actor 挂两个 Wake Word Component：一个 `Preset=Chinese`，一个 `Preset=English`。两个组件都可以勾 `Use Project Wake Words`，因为它们会各自读对应列表。
 
-选好语言后，你只需要填**原文**（中文或英文），插件会自动转成该模型需要的 token 并保存——**不用碰任何文件、不用跑任何脚本**。两个入口：
+不要把英文短语放进中文列表，也不要把中文短语放进英文列表。放错语言会生成不了有效 token，插件会跳过并打印警告，而不是让 sherpa-onnx 崩溃。
 
-### 方式 A：项目设置面板（推荐，适合策划/美术）
+---
 
-**项目设置 → Plugins → Wake Word**：
+## 4. 管理唤醒词
+
+### 项目设置面板
+
+打开 **Project Settings -> Plugins -> Wake Word**：
 
 | 字段 | 说明 |
 |---|---|
-| **Language** | 唤醒词语言：`Chinese`(kws-zh) 或 `English`(kws-en)。决定加载哪个模型与如何分词。 |
-| **Wake Words** | 唤醒词数组。点 ＋ 加一条，填 `Phrase`（中文"芝麻开门"，英文 `OPEN THE DOOR`）。`Tokens` 会按当前 Language 自动显示生成的 token，方便核对。 |
-| **Boost (0=global)** | 该词的命中加权，0=用全局值；短词可设 2.0。 |
-| **Threshold (0=global)** | 该词的独立阈值，0=用全局值。 |
-| **Default Threshold** | 全局灵敏度（误唤醒多→调高到 0.35）。 |
-| **Default Score** | 全局 boosting。 |
+| `Chinese Wake Words` | 中文模型的短语列表。填原文，`Tokens` 自动生成。 |
+| `English Wake Words` | 英文模型的短语列表。填正常英文，`Tokens` 自动生成。 |
+| `Boost (0 = global)` | 单词 boosting。越大越容易命中，短词可试 `2.0`。 |
+| `Threshold (0 = global)` | 单词独立阈值。越大越保守。 |
+| `Default Threshold` | 条目 `Threshold=0` 时使用的全局阈值。 |
+| `Default Score` | 条目 `Boost=0` 时使用的全局 boosting。 |
+| `Default Language (Auto preset)` | 只影响 `Model -> Preset = Auto` 的组件。 |
 
-填好后会**自动持久化**到 `Config/DefaultGame.ini`，项目级生效。组件默认 `Use Project Wake Words = true`，直接读这里。
+面板修改会持久化到 `Config/DefaultGame.ini`，对应键包括 `+ChineseWakeWords=`、
+`+EnglishWakeWords=` 和 `DefaultLanguage=`。
 
-> 改完后如果组件正在监听，调用组件的 **`Refresh Wake Words`**（或重开 PIE）即可生效。
+如果组件正在监听，修改后调用 **Refresh Wake Words** 或重开 PIE 即可生效。
 
-### 方式 B：蓝图运行时增删查（适合做"让玩家自定义唤醒词"的 UI）
+### 蓝图运行时 API
 
-`UWakeWordLibrary` 提供全局函数（右键搜节点名）：
+所有列表操作都带 `Language` 参数：
 
-```
-Set Language (Language=English, bSave=true)   // 切中文/英文(切换模型与分词)
-Get Language              -> 当前语言(Chinese / English)
-Add Wake Word (Phrase="芝麻开门", Boost=0, Threshold=0, bSave=true)
-Remove Wake Word (Phrase="芝麻开门")
-Clear Wake Words
-Get Wake Words            -> 当前所有唤醒词原文(数组)
-Has Wake Word (Phrase)    -> 是否已存在
-Preview Tokens (Phrase)   -> 预览会生成的 token(按当前语言, 不改列表)
-Save Wake Words           -> 手动持久化
-```
-
-典型流程（玩家在 UI 里输入一个词并保存）：
-```
-[输入框文本] ─▶ Add Wake Word (bSave=true) ─▶ WakeWordComponent ▸ Refresh Wake Words
+```text
+Add Wake Word(Language, Phrase, Boost, Threshold, bSave)
+Remove Wake Word(Language, Phrase, bSave)
+Clear Wake Words(Language, bSave)
+Get Wake Words(Language)
+Has Wake Word(Language, Phrase)
+Preview Tokens(Language, Phrase)
+Save Wake Words()
+Get Default Language()
+Set Default Language(Language, bSave)
 ```
 
-`bSave=true` 会写盘持久化，下次启动仍在。改完调用组件的 `Refresh Wake Words` 立即生效。
+典型的玩家自定义流程：
 
-### 关于英文唤醒词
+```text
+Add Wake Word(Language=English, Phrase="OPEN THE DOOR", bSave=true)
+    -> WakeWordComponent(Preset=English) -> Refresh Wake Words
+```
 
-- **首选英文模型**：`Language = English`（或组件 `Preset = English`）。它用 gigaspeech 英文模型，识别率与中文模型相当。直接填英文原文（如 `OPEN THE DOOR`、`HELLO FROG`），插件内置 sentencepiece 分词器会**逐字一致地**还原模型需要的 BPE token，无需 python、无需改文件。
-- **选词建议**：用发音清晰、**2 个词以上**的短语更稳；极短词（`GO`、`NO`）建议加 `Boost = 2.0`。大小写无所谓（内部统一大写）。
-- **中英不能混在一条里**：中文模型只认拼音、英文模型只认 BPE，一个模型不能同时识别中英文。要两种语言同时可用，就挂两个组件（见上"先选语言")。
-- **精确校验**：想确认某个英文词生成的 token，用 `Preview Tokens`，或离线运行 `Tools/text2token.py --lang en`（见 README）。
+### 原始 token 行
 
-### 关于中英混合（仅中文模型）
+高级用户可以通过组件 **Custom Keywords (raw tokens)** 或 `Set Custom Keywords` 绕过自动分词：
 
-中文模型下，中英混合短语（如"你好Jarvis"）：中文部分自动转拼音，英文字母按字母 token 处理（尽力而为）。纯英文请改用英文模型。
+```text
+n ǐ h ǎo sh uāng w ā @你好双蛙
+▁HE LL O ▁F RO G @HELLO_FROG
+```
 
-### 优先级
+格式：
 
-`Custom Keywords (raw tokens)`（组件高级项，原始 token）＞ 项目设置唤醒词 ＞ 内置 `keywords.txt`。
+```text
+<tokens> [:boost] [#threshold] @display_id
+```
+
+WakeWord 1.2.0 会在交给 sherpa-onnx 前用模型的 `tokens.txt` 校验每一行。含未知 token 的行会被丢弃并写日志，避免坏关键词直接杀进程。插件也会把 `@display_id` 内部的空格换成 `_`，命中回调时再换回空格；手写 raw 行时仍建议自己写下划线。
 
 ---
 
-## 4. 调参
+## 5. 调参
 
 | 现象 | 调整 |
 |---|---|
-| 误唤醒多 | `Default Threshold` 0.25 → 0.35；或给该词设 `Threshold = 0.30` |
-| 漏唤醒 | 降低阈值；或给该词设 `Boost = 2.0`；尽量用 4 音节以上的词 |
-| 短词易误触 | 避免 2 音节（"小蛙"），用 4 音节（"你好双蛙"） |
+| 误唤醒多 | `Default Threshold` 从 `0.25` 调到 `0.35`，或给该词设 `Threshold=0.30` 左右。 |
+| 漏唤醒 | 降低阈值、提高 `Boost`，并使用更长更清晰的短语。 |
+| 短词不稳定 | 优先 3 个音节/词以上；非常短的词加 `Boost=2.0`。 |
 
-`Retrigger Cooldown (s)`：命中后的冷却时间，默认 1 秒，防止一次发声重复触发。
-
----
-
-## 5. 接入对话管线（RealtimeVoice）
-
-唤醒词只是"开关"。命中后让出麦克风给对话组件，对话结束再恢复监听：
-
-**前置设置**
-- RealtimeVoice 组件的 `Auto Start On Begin Play` 设为 **false**（否则一进 Play 就抢麦）。
-- WakeWord 组件的 `Auto Start On Begin Play` 设为 **true**。
-
-**接线**
-```
-WakeWord.OnWakeWordDetected   ─▶ WakeWord.StopListening()  ─▶ RealtimeVoice.StartSession()
-RealtimeVoice.OnSessionFinished ─▶ RealtimeVoice.StopSession() ─▶ WakeWord.StartListening()
-```
-两者都用默认麦克风、停止时彻底释放设备，顺序交接干净；无原生库冲突。
+`Retrigger Cooldown (s)` 控制一次命中后多久允许再次触发，默认 `1.0` 秒。
 
 ---
 
-## 6. 蓝图 / C++ API
+## 6. 对话管线接入
+
+WakeWord 适合作为常驻开关。命中后停止 KWS，把麦克风交给对话组件；对话结束再恢复 KWS：
+
+```text
+WakeWord.OnWakeWordDetected
+    -> WakeWord.StopListening()
+    -> RealtimeVoice.StartSession()
+
+RealtimeVoice.OnSessionFinished
+    -> RealtimeVoice.StopSession()
+    -> WakeWord.StartListening()
+```
+
+把 RealtimeVoice 的 `Auto Start On Begin Play` 设为 false，避免它一进场就抢麦克风。详见
+`Docs/Integration.md`。
+
+---
+
+## 7. 蓝图 / C++ API
 
 ### 组件事件
-- `On Wake Word Detected (Keyword: String)` — 命中唤醒词。
-- `On Listening Started` — 麦克风已开、模型就绪。
-- `On Error (Code: Int, Message: String)` — 出错（Code<0=客户端）。
+
+- `On Wake Word Detected(Keyword)`：检测到唤醒词。
+- `On Listening Started`：麦克风打开，spotter 已就绪。
+- `On Error(Code, Message)`：启动或运行错误。
 
 ### 组件函数
-- `Start Listening` / `Stop Listening` / `Is Listening`
-- `Is Ready` — 原生库已加载且模型/唤醒词齐全。
-- `Refresh Wake Words` — 改完唤醒词后调用以立即生效。
-- `Set Custom Keywords (Lines, bRestart)` — 高级：直接给原始 token 行。
-- `Get Model Dir` — 排查路径用。
 
-### 唤醒词库（UWakeWordLibrary，全局）
-`Get / Set Language`、`Add / Remove / Clear / Get / Has Wake Word`、`Preview Tokens`、`Save Wake Words`。
+- `Start Listening` / `Stop Listening` / `Is Listening`
+- `Is Ready`
+- `Refresh Wake Words`
+- `Set Custom Keywords`
+- `Get Model Dir`
 
 ### C++
+
 ```cpp
 #include "WakeWordComponent.h"
 #include "WakeWordLibrary.h"
-#include "WakeWordSettings.h"   // EWakeWordLanguage
+#include "WakeWordSettings.h"
 
-// 中文
-UWakeWordLibrary::AddWakeWord(TEXT("芝麻开门"), 0.f, 0.f, /*bSave*/true);
+UWakeWordLibrary::AddWakeWord(EWakeWordLanguage::Chinese, TEXT("芝麻开门"), 0.f, 0.f, true);
+UWakeWordLibrary::AddWakeWord(EWakeWordLanguage::English, TEXT("OPEN THE DOOR"), 0.f, 0.f, true);
 
-// 英文：先切语言再加词
-UWakeWordLibrary::SetLanguage(EWakeWordLanguage::English, /*bSave*/true);
-UWakeWordLibrary::AddWakeWord(TEXT("OPEN THE DOOR"), 0.f, 0.f, true);
-
-WakeWord->OnWakeWordDetected.AddDynamic(this, &AMyActor::OnWake);
-WakeWord->RefreshWakeWords();   // 组件 Model.Preset=Auto 会跟随上面的语言
+WakeWord->Model.Preset = EWakeWordModelPreset::English;
+WakeWord->RefreshWakeWords();
 WakeWord->StartListening();
 ```
 
+`SetDefaultLanguage(EWakeWordLanguage::English, true)` 只影响 `Model -> Preset = Auto` 的组件。
+
 ---
 
-## 7. 排错
+## 8. 排错
 
 | 现象 | 排查 |
 |---|---|
-| `On Error` code `-10` | 原生 DLL 没加载：确认 `Binaries/Win64` 下有 `onnxrt_ww.dll`/`sherpa-onnx-c-api.dll`。 |
-| `On Error` code `-11` | 模型/唤醒词缺失：用 `Get Model Dir` 看路径，确认 `Resources/kws-zh`（英文则 `kws-en`）文件齐全，且至少有一个唤醒词。 |
-| `On Error` code `-3` | 麦克风打不开：检查默认录音设备与 Windows 麦克风权限。 |
-| 一直无命中 | 看 Output Log 的 `LogWakeWord`：应有 `Spotter ready ...`；用 `Preview Tokens` 确认你的词生成的 token 正常；适当降阈值。 |
-| 某词 `produced no tokens` 警告 | 该短语含无法识别的字符（生僻字/纯符号）；换个词或用 raw tokens。 |
+| `On Error` code `-10` | 原生 DLL 没加载。确认 `Binaries/Win64` 下有 `onnxrt_ww.dll` 与 `sherpa-onnx-c-api.dll`。 |
+| `On Error` code `-11` | 模型或关键词源缺失。用 `Get Model Dir` 看路径，确认模型文件和当前 Preset 对应的唤醒词列表存在。 |
+| `On Error` code `-3` | 麦克风打不开。检查 Windows 麦克风权限和默认录音设备。 |
+| 一直无命中 | 确认短语在组件 Preset 对应的列表里；用 `Preview Tokens` 检查；适当降低阈值。 |
+| `produced no tokens` 警告 | 短语放错语言列表，或包含不支持字符。移到正确列表或换个词。 |
 
 ---
 
-## 8. 常见问题 FAQ
-
-**Q：唤醒词存在哪？会不会丢？**
-A：存在项目的 `Config/DefaultGame.ini`（面板填写或 `bSave=true` 时）。随工程走，不会丢。
-
-**Q：要联网吗？有调用费用吗？**
-A：完全离线，零费用，零隐私外泄。
-
-**Q：能识别多少个唤醒词？**
-A：数量不限，每个模型才 3.3M，开销可忽略。建议同时启用的别太多以控制误唤醒。
-
-**Q：英文到底行不行？**
-A：行。把 `Language` 切成 **English** 即用内置 gigaspeech 英文模型，直接填英文原文，识别率与中文相当。插件内置 sentencepiece 分词器与训练时分词逐字一致，无需 python。
+## 9. FAQ
 
 **Q：能中英文同时用吗？**
-A：一个模型只能识别一种语言。要同时支持，就在一个 Actor 上挂两个 `Wake Word Component`，一个 `Preset=Chinese`、一个 `Preset=English`，各绑各的事件。
+A：可以。挂两个组件，一个 `Preset=Chinese`，一个 `Preset=English`，各绑各的事件。
 
-**Q：换更高精度的模型行吗？**
-A：把对应 onnx 放进 `Resources/kws-zh` 或 `kws-en`，把组件 `Model → Preset` 设为 `Custom` 并填目录/文件名即可（默认用 int8 小模型）。
+**Q：唤醒词存在哪里？**
+A：面板修改或 `bSave=true` 时写入项目的 `Config/DefaultGame.ini`。
+
+**Q：英文识别可用吗？**
+A：可用。英文短语填 `English Wake Words`，组件设 `Preset=English`。内置 sentencepiece 兼容分词器会在运行时生成模型需要的 BPE token。
+
+**Q：一条短语里能中英混合吗？**
+A：不建议，也不再做英文逐字母兜底。一个模型只识别一种 token 系统；要中英文都可用，请用两个组件。
+
+**Q：能换自己的模型吗？**
+A：可以。把 ONNX 文件和 `tokens.txt` 放到目录里，组件 `Model -> Preset` 设为 `Custom`，再填写目录和文件名。
 
 ---
 
-许可：插件本体版权归 odysseyzjh；内置 sherpa-onnx / ONNX Runtime / 模型为各自开源许可（Apache-2.0 / MIT），见 `THIRD_PARTY_NOTICES.md`。
